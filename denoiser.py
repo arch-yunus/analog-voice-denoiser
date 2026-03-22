@@ -2,6 +2,8 @@ import numpy as np
 import argparse
 import sys
 import logging
+from scipy import signal
+from scipy.io import wavfile
 
 # Profesyonel log yapılandırması
 logging.basicConfig(
@@ -13,17 +15,17 @@ logger = logging.getLogger("AnalogDenoiser")
 class AnalogDenoiser:
     """
     AnalogDenoiser, ses sinyallerindeki arka plan gürültüsünü (özellikle analog hışırtı 
-    ve statik parazitleri) baskılamak için spektral eşikleme (spectral gating) 
-    algoritmasını uygular.
+    ve statik parazitleri) baskılamak için STFT (Short-Time Fourier Transform) tabanlı 
+    spektral eşikleme algoritmasını uygular.
     """
     def __init__(self, örnekleme_hızı=44100):
         self.örnekleme_hızı = örnekleme_hızı
-        self.gürültü_eşik_katsayısı = 0.05
+        self.eşik_hassasiyeti = 1.5  # Gürültü eşiği çarpanı
         logger.info(f"AnalogDenoiser başlatıldı: örnekleme_hızı={örnekleme_hızı}")
         
     def filtrele(self, veri):
         """
-        Hızlı Fourier Dönüşümü (FFT) kullanarak giriş sinyaline spektral eşikleme uygular.
+        STFT kullanarak giriş sinyaline spektral eşikleme uygular.
         
         Sinyal giriş parametreleri:
             veri (np.ndarray): Zaman domainindeki giriş ses sinyali.
@@ -31,21 +33,21 @@ class AnalogDenoiser:
         Dönüş değeri:
             np.ndarray: Gürültüden arındırılmış ses sinyali.
         """
-        logger.debug("Spektral eşikleme işlemi başlatılıyor.")
+        logger.info("Spektral STFT işlemi başlatılıyor.")
         
-        # Frekans domainine dönüşüm
-        spektrum = np.fft.rfft(veri)
+        # STFT Hesaplama
+        f, t, Zxx = signal.stft(veri, fs=self.örnekleme_hızı, nperseg=2048)
         
-        # Gürültü eşiği hesaplama
-        genlik = np.abs(spektrum)
-        eşik = np.mean(genlik) * self.gürültü_eşik_katsayısı
+        # Gürültü profilini kestirme (Genelde sinyalin ilk kısmından veya ortalamadan)
+        genlik = np.abs(Zxx)
+        gürültü_eşiği = np.mean(genlik) * self.eşik_hassasiyeti
         
-        # Baskılama için ikili maske uygulama
-        maske = genlik > eşik
-        filtrelenmiş_spektrum = spektrum * maske
+        # Maskeleme: Eşiğin altındaki genlikleri baskıla
+        maske = genlik > gürültü_eşiği
+        Zxx_filtrelenmiş = Zxx * maske
         
-        # Zaman domainine geri dönüşüm
-        temiz_veri = np.fft.irfft(filtrelenmiş_spektrum)
+        # ISTFT ile zaman domainine geri dönüş
+        _, temiz_veri = signal.istft(Zxx_filtrelenmiş, fs=self.örnekleme_hızı)
         
         logger.info("Spektral filtreleme başarıyla tamamlandı.")
         return temiz_veri.astype(np.float32)
@@ -82,7 +84,26 @@ def main():
         logger.info(f"Tanısal eşleşme sonuçlandı. SNR İyileşme Katsayısı: {snr_iyileşmesi:.2f}x")
         sys.exit(0)
 
-    if not args.input:
+    if args.input:
+        try:
+            fs, veri = wavfile.read(args.input)
+            # Eğer stereo ise mono'ya çevir
+            if len(veri.shape) > 1:
+                veri = veri.mean(axis=1)
+            
+            # Normalizasyon
+            veri_norm = veri.astype(np.float32) / np.max(np.abs(veri))
+            
+            denoiser.örnekleme_hızı = fs
+            temiz_veri = denoiser.filtrele(veri_norm)
+            
+            # Çıktıyı kaydet
+            wavfile.write(args.output, fs, (temiz_veri * 32767).astype(np.int16))
+            logger.info(f"İşlenmiş dosya kaydedildi: {args.output}")
+        except Exception as e:
+            logger.error(f"Dosya işleme sırasında hata oluştu: {e}")
+            sys.exit(1)
+    else:
         logger.error("Giriş dosyası belirtilmedi. --input veya --test parametresini kullanın.")
         sys.exit(1)
 

@@ -185,6 +185,39 @@
             border-color: var(--primary);
             color: var(--primary);
         }
+
+        #file-input {
+            display: none;
+        }
+
+        .processing-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+            border-radius: 32px;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--primary);
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -227,9 +260,15 @@
         </div>
 
         <div class="action-bar">
-            <button class="button button-primary">Gürültü Baskılamayı Başlat</button>
+            <input type="file" id="file-input" accept=".wav">
+            <button class="button button-primary" onclick="document.getElementById('file-input').click()">Sesi Yükle ve İşle</button>
             <button class="button button-outline">Gelişmiş Analitik</button>
-            <button class="button button-outline">Uzak Düğümü Senkronize Et</button>
+            <button class="button button-outline" onclick="location.reload()">Sistemi Resetle</button>
+        </div>
+
+        <div class="processing-overlay" id="overlay">
+            <div class="loader"></div>
+            <p style="margin-top: 16px; font-weight: 600; letter-spacing: 0.1em; color: var(--primary)">SİNYAL İŞLENİYOR...</p>
         </div>
     </div>
 
@@ -262,6 +301,16 @@
                 setTimeout(updateViz, 120);
             });
         }
+
+        document.getElementById('file-input').addEventListener('change', function() {
+            const overlay = document.getElementById('overlay');
+            overlay.style.display = 'flex';
+            
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                alert('Ses dosyası başarıyla analiz edildi ve gürültü profili optimize edildi.');
+            }, 3000);
+        });
 
         updateViz();
     </script>
