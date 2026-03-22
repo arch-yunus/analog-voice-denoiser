@@ -8,7 +8,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Durum: Araştırma](https://img.shields.io/badge/Durum-Ara%C5%9Ft%C4%B1rma-orange.svg)]()
 
-**Analog Voice Denoiser (AVD)**, ses kayıtlarındaki spektral gürültüyü, statik paraziti ve analog hışırtıyı nötralize etmek için tasarlanmış yüksek sadakatli bir ses işleme aracıdır. Gelişmiş STFT (Short-Time Fourier Transform) ve Spektral Maskeleme algoritmalarını kullanan AVD, gürültü tabanını cerrahi bir hassasiyetle bastırırken insan vokal frekanslarını izole eder.
+**Analog Voice Denoiser (AVD)**, ses kayıtlarındaki spektral gürültüyü, statik paraziti ve analog hışırtıyı nötralize etmek için tasarlanmış yüksek sadakatli bir ses işleme aracıdır. Gelişmiş STFT mimarisi, Wiener filtreleme ve VAD desteği ile profesyonel bir "Enterprise Edition" deneyimi sunar.
 
 ---
 
@@ -52,9 +52,13 @@ pip install -r requirements.txt
 python denoiser.py --test
 ```
 
-### CLI Seçenekleri
+### Docker Kullanımı
 ```bash
-python denoiser.py --input <giriş.wav> --output <çıkış.wav> --verbose
+# Docker imajını oluşturun
+docker build -t avd .
+
+# Tüm bir dizini işleyin
+docker run -v ${PWD}/data:/app/data avd --input-dir /app/data --output-dir /app/output
 ```
 
 ## 🗺 Yol Haritası
@@ -64,6 +68,7 @@ python denoiser.py --input <giriş.wav> --output <çıkış.wav> --verbose
 - [x] **Aşama III:** STFT tabanlı gelişmiş sinyal işleme ve WAV I/O.
 - [x] **Aşama IV:** Wiener filtreleme ve VAD tabanlı akıllı gürültü kestirimi.
 - [x] **Aşama V:** Çoklu algoritma motoru ve gerçek zamanlı metrik analizi.
+- [x] **Aşama VI:** Kurumsal Altyapı, Batch Processing ve Dockerizasyon.
 
 ## 📜 Lisans
 

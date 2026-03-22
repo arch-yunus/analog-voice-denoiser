@@ -63,10 +63,22 @@
         .status-indicator {
             width: 10px;
             height: 10px;
-            background: var(--primary);
+            background: #4ade80;
             border-radius: 50%;
-            box-shadow: 0 0 15px var(--primary);
-            animation: breathe 3s ease-in-out infinite;
+            box-shadow: 0 0 15px #4ade80;
+            animation: breathe 2s ease-in-out infinite;
+        }
+
+        .enterprise-badge {
+            background: linear-gradient(45deg, #ffd700, #ffa500);
+            color: #000;
+            font-size: 0.6rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 800;
+            margin-left: 10px;
+            vertical-align: middle;
+            text-shadow: none;
         }
 
         @keyframes breathe {
@@ -265,9 +277,9 @@
             <div>
                 <div class="system-status">
                     <div class="status-indicator"></div>
-                    Sinyal İşlemci Aktif
+                    Sinyal İşlemci Aktif <span class="enterprise-badge">ENTERPRISE EDITION</span>
                 </div>
-                <h1>ANALOG CORE v1.0</h1>
+                <h1>ANALOG CORE v1.2</h1>
             </div>
             <div style="text-align: right">
                 <div class="metric-label">Proje Durumu</div>

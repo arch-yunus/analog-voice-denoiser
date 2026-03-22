@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "analog-voice-denoiser"
+version = "1.0.0"
+authors = [
+    { name = "Bahattin Yunus", email = "bahattinyunus@example.com" }
+]
+description = "Professional analog voice denoising toolkit with multiple spectral algorithms."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0"
+]
+
+[project.scripts]
+avd = "denoiser:main"

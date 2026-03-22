@@ -2,6 +2,8 @@ import numpy as np
 import argparse
 import sys
 import logging
+import os
+from pathlib import Path
 from scipy import signal
 from scipy.io import wavfile
 
@@ -78,15 +80,17 @@ class AnalogDenoiser:
         return temiz[:len(veri)].astype(np.float32)
 
     def _lms_filtrele(self, veri):
+        """
+        Least Mean Squares (LMS) adaptif filtreleme uygulaması.
+        Referans sinyal gecikmeli giriş sinyali kullanılarak gürültü tahmini yapılır.
+        """
         logger.info("LMS adaptif filtreleme uygulanıyor.")
-        # Basit bir ses-gecikmesi tabanlı LMS (Referans gürültü tahmini ile)
         mu = 0.01  # Öğrenme hızı
         L = 32     # Filtre boyu
         w = np.zeros(L)
         y = np.zeros(len(veri))
         e = np.zeros(len(veri))
         
-        # Geciktirilmiş sinyal gürültü referansı olarak kullanılıyor (Basit bir yaklaşım)
         delay = 100
         ref = np.zeros(len(veri))
         ref[delay:] = veri[:-delay]
@@ -98,6 +102,29 @@ class AnalogDenoiser:
             w = w + 2 * mu * e[i] * x
             
         return e.astype(np.float32)
+
+def batch_isleme(denoiser, input_dir, output_dir, method="wiener"):
+    """
+    Belirtilen dizindeki tüm .wav dosyalarını toplu olarak işler.
+    """
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Toplu işleme başlatıldı: {input_path}")
+    wav_files = list(input_path.glob("*.wav"))
+    for i, wav_file in enumerate(wav_files):
+        try:
+            fs, veri = wavfile.read(wav_file)
+            if len(veri.shape) > 1: veri = veri.mean(axis=1)
+            veri_norm = veri.astype(np.float32) / (np.max(np.abs(veri)) + 1e-12)
+            
+            temiz = denoiser.filtrele(veri_norm, method=method)
+            out_name = output_path / f"temiz_{wav_file.name}"
+            wavfile.write(out_name, fs, (temiz * 32767).astype(np.int16))
+            logger.info(f"[{i+1}/{len(wav_files)}] İşlendi: {wav_file.name}")
+        except Exception as e:
+            logger.error(f"Hata ({wav_file.name}): {e}")
 
 def test_sinyali_oluştur(süre=3, frekans=440):
     """
@@ -112,7 +139,9 @@ def main():
     parser = argparse.ArgumentParser(description="Analog Voice Denoiser CLI Araç Seti")
     parser.add_argument("--test", action="store_true", help="Otomatik tanısal testi çalıştır")
     parser.add_argument("--input", type=str, help="Giriş .wav dosyasının yolu")
+    parser.add_argument("--input-dir", type=str, help="Toplu işleme için giriş dizini")
     parser.add_argument("--output", type=str, default="temiz_cikti.wav", help="İşlenmiş çıktının kaydedileceği yol")
+    parser.add_argument("--output-dir", type=str, default="output", help="Toplu işleme için çıkış dizini")
     parser.add_argument("--method", type=str, default="wiener", choices=["wiener", "spectral", "lms"], help="Gürültü engelleme metodu")
     parser.add_argument("--verbose", action="store_true", help="Hata ayıklama seviyesinde loglamayı etkinleştir")
     
@@ -136,6 +165,11 @@ def main():
         
         sys.exit(0)
 
+    # Toplu İşleme (Batch Processing)
+    if args.input_dir:
+        batch_isleme(denoiser, args.input_dir, args.output_dir, method=args.method)
+        sys.exit(0)
+
     if args.input:
         try:
             fs, veri = wavfile.read(args.input)
@@ -151,7 +185,7 @@ def main():
             logger.error(f"Dosya işleme sırasında hata oluştu: {e}")
             sys.exit(1)
     else:
-        logger.error("Giriş dosyası belirtilmedi. --input veya --test parametresini kullanın.")
+        logger.error("Giriş yolu belirtilmedi. --input, --input-dir veya --test kullanın.")
         sys.exit(1)
 
 if __name__ == "__main__":
