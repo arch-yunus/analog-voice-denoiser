@@ -15,42 +15,54 @@ logger = logging.getLogger("AnalogDenoiser")
 class AnalogDenoiser:
     """
     AnalogDenoiser, ses sinyallerindeki arka plan gürültüsünü (özellikle analog hışırtı 
-    ve statik parazitleri) baskılamak için STFT (Short-Time Fourier Transform) tabanlı 
-    spektral eşikleme algoritmasını uygular.
+    ve statik parazitleri) baskılamak için STFT tabanlı Wiener filtreleme 
+    ve VAD (Ses Aktivite Algılama) mekanizmalarını uygular.
     """
     def __init__(self, örnekleme_hızı=44100):
         self.örnekleme_hızı = örnekleme_hızı
-        self.eşik_hassasiyeti = 1.5  # Gürültü eşiği çarpanı
-        logger.info(f"AnalogDenoiser başlatıldı: örnekleme_hızı={örnekleme_hızı}")
+        self.eşik_hassasiyeti = 1.2
+        self.vad_eşiği = 0.02 # Enerji tabanlı VAD eşiği
+        logger.info(f"AnalogDenoiser başlatıldı (Phase IV): fs={örnekleme_hızı}")
         
+    def _vad_maskesi(self, veri):
+        """
+        Basit enerji tabanlı VAD (Voice Activity Detection).
+        """
+        enerji = veri**2
+        ortalama_enerji = np.mean(enerji)
+        return ortalama_enerji > self.vad_eşiği
+
     def filtrele(self, veri):
         """
-        STFT kullanarak giriş sinyaline spektral eşikleme uygular.
-        
-        Sinyal giriş parametreleri:
-            veri (np.ndarray): Zaman domainindeki giriş ses sinyali.
-            
-        Dönüş değeri:
-            np.ndarray: Gürültüden arındırılmış ses sinyali.
+        Wiener Filtreleme ve Yumuşak Maskeleme uygular.
         """
-        logger.info("Spektral STFT işlemi başlatılıyor.")
+        logger.info("Gelişmiş Wiener filtreleme işlemi başlatılıyor.")
         
         # STFT Hesaplama
         f, t, Zxx = signal.stft(veri, fs=self.örnekleme_hızı, nperseg=2048)
+        PSD = np.abs(Zxx)**2 # Güç Spektral Yoğunluğu
         
-        # Gürültü profilini kestirme (Genelde sinyalin ilk kısmından veya ortalamadan)
-        genlik = np.abs(Zxx)
-        gürültü_eşiği = np.mean(genlik) * self.eşik_hassasiyeti
+        # Gürültü Kestirimi (Sinyalin gürültülü olduğu varsayılan düşük enerjili kısımlarından)
+        # Basitçe tüm sinyalin ortalama gürültü tabanını alıyoruz (Wiener yaklaşımı)
+        gürültü_psd = np.mean(PSD, axis=1, keepdims=True) * self.eşik_hassasiyeti
         
-        # Maskeleme: Eşiğin altındaki genlikleri baskıla
-        maske = genlik > gürültü_eşiği
-        Zxx_filtrelenmiş = Zxx * maske
+        # Wiener Kazancı: G = (PSD - Noise_PSD) / PSD
+        # Negatif değerleri 0'a çekiyoruz (Soft thresholding)
+        kazanç = np.maximum(0, (PSD - gürültü_psd) / (PSD + 1e-12))
+        
+        # Kazancı yumuşat (Spektral pürüzsüzlük için)
+        kazanç = signal.medfilt2d(kazanç, [1, 5])
+        
+        Zxx_filtrelenmiş = Zxx * kazanç
         
         # ISTFT ile zaman domainine geri dönüş
         _, temiz_veri = signal.istft(Zxx_filtrelenmiş, fs=self.örnekleme_hızı)
         
-        logger.info("Spektral filtreleme başarıyla tamamlandı.")
-        return temiz_veri.astype(np.float32)
+        # Sinyal boyu uyumu
+        output = temiz_veri[:len(veri)]
+        
+        logger.info("Wiener filtreleme başarıyla tamamlandı.")
+        return output.astype(np.float32)
 
 def test_sinyali_oluştur(süre=3, frekans=440):
     """

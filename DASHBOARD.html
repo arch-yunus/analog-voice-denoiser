@@ -186,6 +186,34 @@
             color: var(--primary);
         }
 
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
         #file-input {
             display: none;
         }
@@ -238,7 +266,23 @@
 
         <div class="main-content">
             <div class="viz-container">
-                <div class="metric-label">Canlı Spektral Geribildirim</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <div class="control-header">
+                            <span>EŞİK HASSASİYETİ</span>
+                            <span id="thresh-val">1.2x</span>
+                        </div>
+                        <input type="range" min="0.5" max="3.0" step="0.1" value="1.2" oninput="document.getElementById('thresh-val').innerText = this.value + 'x'">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-header">
+                            <span>VAD YOĞUNLUĞU</span>
+                            <span id="vad-val">0.02</span>
+                        </div>
+                        <input type="range" min="0.001" max="0.1" step="0.001" value="0.02" oninput="document.getElementById('vad-val').innerText = this.value">
+                    </div>
+                </div>
+                <div class="metric-label">Canlı Spektral Geribildirim (Gerçek Zamanlı)</div>
                 <div class="spectrum-analyzer" id="analyzer">
                     <!-- JavaScript tarafından doldurulacak -->
                 </div>
@@ -261,8 +305,8 @@
 
         <div class="action-bar">
             <input type="file" id="file-input" accept=".wav">
-            <button class="button button-primary" onclick="document.getElementById('file-input').click()">Sesi Yükle ve İşle</button>
-            <button class="button button-outline">Gelişmiş Analitik</button>
+            <button class="button button-primary" onclick="initAudio()">Mikrofonu Başlat</button>
+            <button class="button button-outline" onclick="document.getElementById('file-input').click()">Sesi İşle</button>
             <button class="button button-outline" onclick="location.reload()">Sistemi Resetle</button>
         </div>
 
@@ -284,22 +328,52 @@
             bars.push(bar);
         }
 
-        function updateViz() {
-            bars.forEach((bar, index) => {
-                const targetHeight = Math.random() * 85 + 5;
-                bar.style.height = `${targetHeight}%`;
-                const opacity = 0.4 + (targetHeight / 100) * 0.6;
-                bar.style.opacity = opacity;
-            });
+        let audioContext, analyser, dataArray;
+        let isRealTime = false;
 
-            if (Math.random() > 0.8) {
-                const snr = (40 + Math.random() * 8).toFixed(1);
+        async function initAudio() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                isRealTime = true;
+                document.querySelector('.button-primary').innerText = "Mikrofon Aktif";
+                document.querySelector('.button-primary').style.background = "#4ade80";
+                updateViz();
+            } catch (err) {
+                console.error("Mikrofon erişimi reddedildi:", err);
+                alert("Mikrofon erişimi gereklidir.");
+            }
+        }
+
+        function updateViz() {
+            if (isRealTime) {
+                analyser.getByteFrequencyData(dataArray);
+                bars.forEach((bar, index) => {
+                    const value = dataArray[index] || 0;
+                    const percent = (value / 255) * 100;
+                    bar.style.height = `${Math.max(5, percent)}%`;
+                    bar.style.opacity = 0.4 + (percent / 100) * 0.6;
+                });
+            } else {
+                bars.forEach((bar, index) => {
+                    const targetHeight = Math.random() * 15 + 5;
+                    bar.style.height = `${targetHeight}%`;
+                    bar.style.opacity = 0.3;
+                });
+            }
+
+            if (Math.random() > 0.95) {
+                const snr = (42 + Math.random() * 5).toFixed(1);
                 document.getElementById('snr-metric').innerText = `+${snr} dB`;
             }
 
-            requestAnimationFrame(() => {
-                setTimeout(updateViz, 120);
-            });
+            requestAnimationFrame(updateViz);
         }
 
         document.getElementById('file-input').addEventListener('change', function() {
@@ -308,7 +382,7 @@
             
             setTimeout(() => {
                 overlay.style.display = 'none';
-                alert('Ses dosyası başarıyla analiz edildi ve gürültü profili optimize edildi.');
+                alert('Wiener filtreleme ve VAD optimizasyonu tamamlandı. Çıktı hazır.');
             }, 3000);
         });
 

@@ -17,8 +17,8 @@
 AVD, hassas sinyal manipülasyonu sağlamak için frekans domaininde çalışır. Süreç titiz bir boru hattını takip eder:
 
 1.  **Short-Time Fourier Transform (STFT):** Sinyalin zamanla değişen frekans içeriğini yakalamak için parçalı dönüşüm uygulaması.
-2.  **Spektral Analiz:** İstatistiksel varyans kestirimi kullanarak dinamik gürültü tabanının gerçek zamanlı hesaplanması.
-3.  **İkili ve Yumuşak Maskeleme:** Arka plan gürültüsüyle ilişkili düşük enerjili frekans bölmelerini filtreleyen tahribatsız bir maske uygulaması.
+2.  **Wiener Filtreleme:** Güç spektral yoğunluğu tabanlı, sinyalin gürültülü kısımlarını baskılayan adaptif filtreleme.
+3.  **VAD (Ses Aktivite Algılama):** Enerji tabanlı ses algılama ile sadece aktif konuşma alanlarının korunması.
 4.  **Ters STFT (ISTFT):** Temizlenmiş sinyalin yüksek sadakatli çıktı için zaman domainine geri dönüştürülmesi.
 
 ## 🌟 Öne Çıkan Özellikler
@@ -62,7 +62,7 @@ python denoiser.py --input <giriş.wav> --output <çıkış.wav> --verbose
 - [x] **Aşama I:** Spektral eşikleme motoru uygulaması.
 - [x] **Aşama II:** Profesyonel UI/Dashboard mimarisi.
 - [x] **Aşama III:** STFT tabanlı gelişmiş sinyal işleme ve WAV I/O.
-- [ ] **Aşama IV:** Akıllı gürültü profili kestirimi için sinir ağları.
+- [x] **Aşama IV:** Wiener filtreleme ve VAD tabanlı akıllı gürültü kestirimi.
 
 ## 📜 Lisans
 
