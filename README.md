@@ -63,6 +63,7 @@ python denoiser.py --input <giriş.wav> --output <çıkış.wav> --verbose
 - [x] **Aşama II:** Profesyonel UI/Dashboard mimarisi.
 - [x] **Aşama III:** STFT tabanlı gelişmiş sinyal işleme ve WAV I/O.
 - [x] **Aşama IV:** Wiener filtreleme ve VAD tabanlı akıllı gürültü kestirimi.
+- [x] **Aşama V:** Çoklu algoritma motoru ve gerçek zamanlı metrik analizi.
 
 ## 📜 Lisans
 

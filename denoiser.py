@@ -21,48 +21,83 @@ class AnalogDenoiser:
     def __init__(self, örnekleme_hızı=44100):
         self.örnekleme_hızı = örnekleme_hızı
         self.eşik_hassasiyeti = 1.2
-        self.vad_eşiği = 0.02 # Enerji tabanlı VAD eşiği
-        logger.info(f"AnalogDenoiser başlatıldı (Phase IV): fs={örnekleme_hızı}")
+        self.vad_eşiği = 0.02
+        logger.info(f"AnalogDenoiser başlatıldı (Phase V): fs={örnekleme_hızı}")
         
-    def _vad_maskesi(self, veri):
+    def analiz_et(self, veri):
         """
-        Basit enerji tabanlı VAD (Voice Activity Detection).
+        Sinyal metriklerini hesaplar: RMS, ZCR, Spektral Centroid.
         """
-        enerji = veri**2
-        ortalama_enerji = np.mean(enerji)
-        return ortalama_enerji > self.vad_eşiği
+        rms = np.sqrt(np.mean(veri**2))
+        zcr = np.mean(np.abs(np.diff(np.sign(veri)))) / 2
+        
+        # Spektral Centroid (Basitleştirilmiş)
+        spektrum = np.abs(np.fft.rfft(veri))
+        frekanslar = np.fft.rfftfreq(len(veri), 1/self.örnekleme_hızı)
+        centroid = np.sum(frekanslar * spektrum) / (np.sum(spektrum) + 1e-12)
+        
+        return {"rms": rms, "zcr": zcr, "centroid": centroid}
 
-    def filtrele(self, veri):
+    def filtrele(self, veri, method="wiener"):
         """
-        Wiener Filtreleme ve Yumuşak Maskeleme uygular.
+        Seçilen metoda göre gürültü engelleme uygular.
+        Methodlar: 'wiener', 'spectral', 'lms'
         """
-        logger.info("Gelişmiş Wiener filtreleme işlemi başlatılıyor.")
-        
-        # STFT Hesaplama
+        if method == "wiener":
+            return self._wiener_filtrele(veri)
+        elif method == "spectral":
+            return self._spektral_cikarma(veri)
+        elif method == "lms":
+            return self._lms_filtrele(veri)
+        else:
+            logger.warning(f"Bilinmeyen metod '{method}', Wiener kullanılıyor.")
+            return self._wiener_filtrele(veri)
+
+    def _wiener_filtrele(self, veri):
+        logger.info("Wiener filtreleme uygulanıyor.")
         f, t, Zxx = signal.stft(veri, fs=self.örnekleme_hızı, nperseg=2048)
-        PSD = np.abs(Zxx)**2 # Güç Spektral Yoğunluğu
-        
-        # Gürültü Kestirimi (Sinyalin gürültülü olduğu varsayılan düşük enerjili kısımlarından)
-        # Basitçe tüm sinyalin ortalama gürültü tabanını alıyoruz (Wiener yaklaşımı)
+        PSD = np.abs(Zxx)**2
         gürültü_psd = np.mean(PSD, axis=1, keepdims=True) * self.eşik_hassasiyeti
-        
-        # Wiener Kazancı: G = (PSD - Noise_PSD) / PSD
-        # Negatif değerleri 0'a çekiyoruz (Soft thresholding)
         kazanç = np.maximum(0, (PSD - gürültü_psd) / (PSD + 1e-12))
-        
-        # Kazancı yumuşat (Spektral pürüzsüzlük için)
         kazanç = signal.medfilt2d(kazanç, [1, 5])
+        Zxx_filt = Zxx * kazanç
+        _, temiz = signal.istft(Zxx_filt, fs=self.örnekleme_hızı)
+        return temiz[:len(veri)].astype(np.float32)
+
+    def _spektral_cikarma(self, veri):
+        logger.info("Spektral çıkarma uygulanıyor.")
+        f, t, Zxx = signal.stft(veri, fs=self.örnekleme_hızı, nperseg=2048)
+        genlik = np.abs(Zxx)
+        faz = np.angle(Zxx)
         
-        Zxx_filtrelenmiş = Zxx * kazanç
+        gürültü_genlik = np.mean(genlik, axis=1, keepdims=True) * self.eşik_hassasiyeti
+        yeni_genlik = np.maximum(0, genlik - gürültü_genlik)
         
-        # ISTFT ile zaman domainine geri dönüş
-        _, temiz_veri = signal.istft(Zxx_filtrelenmiş, fs=self.örnekleme_hızı)
+        Zxx_yeni = yeni_genlik * np.exp(1j * faz)
+        _, temiz = signal.istft(Zxx_yeni, fs=self.örnekleme_hızı)
+        return temiz[:len(veri)].astype(np.float32)
+
+    def _lms_filtrele(self, veri):
+        logger.info("LMS adaptif filtreleme uygulanıyor.")
+        # Basit bir ses-gecikmesi tabanlı LMS (Referans gürültü tahmini ile)
+        mu = 0.01  # Öğrenme hızı
+        L = 32     # Filtre boyu
+        w = np.zeros(L)
+        y = np.zeros(len(veri))
+        e = np.zeros(len(veri))
         
-        # Sinyal boyu uyumu
-        output = temiz_veri[:len(veri)]
+        # Geciktirilmiş sinyal gürültü referansı olarak kullanılıyor (Basit bir yaklaşım)
+        delay = 100
+        ref = np.zeros(len(veri))
+        ref[delay:] = veri[:-delay]
         
-        logger.info("Wiener filtreleme başarıyla tamamlandı.")
-        return output.astype(np.float32)
+        for i in range(L, len(veri)):
+            x = ref[i:i-L:-1]
+            y[i] = np.dot(w, x)
+            e[i] = veri[i] - y[i]
+            w = w + 2 * mu * e[i] * x
+            
+        return e.astype(np.float32)
 
 def test_sinyali_oluştur(süre=3, frekans=440):
     """
@@ -78,6 +113,7 @@ def main():
     parser.add_argument("--test", action="store_true", help="Otomatik tanısal testi çalıştır")
     parser.add_argument("--input", type=str, help="Giriş .wav dosyasının yolu")
     parser.add_argument("--output", type=str, default="temiz_cikti.wav", help="İşlenmiş çıktının kaydedileceği yol")
+    parser.add_argument("--method", type=str, default="wiener", choices=["wiener", "spectral", "lms"], help="Gürültü engelleme metodu")
     parser.add_argument("--verbose", action="store_true", help="Hata ayıklama seviyesinde loglamayı etkinleştir")
     
     args = parser.parse_args()
@@ -90,28 +126,27 @@ def main():
     if args.test:
         logger.info("Otomatik tanı dizisi başlatılıyor...")
         kirli_sinyal = test_sinyali_oluştur()
-        temiz_sinyal = denoiser.filtrele(kirli_sinyal)
         
-        snr_iyileşmesi = np.var(kirli_sinyal) / np.var(temiz_sinyal)
-        logger.info(f"Tanısal eşleşme sonuçlandı. SNR İyileşme Katsayısı: {snr_iyileşmesi:.2f}x")
+        for m in ["wiener", "spectral", "lms"]:
+            logger.info(f"Test ediliyor: {m}")
+            temiz_sinyal = denoiser.filtrele(kirli_sinyal, method=m)
+            snr_iyileşmesi = np.var(kirli_sinyal) / np.var(temiz_sinyal)
+            metrikler = denoiser.analiz_et(temiz_sinyal)
+            logger.info(f"Metod: {m} | SNR İyileşme: {snr_iyileşmesi:.2f}x | RMS: {metrikler['rms']:.4f}")
+        
         sys.exit(0)
 
     if args.input:
         try:
             fs, veri = wavfile.read(args.input)
-            # Eğer stereo ise mono'ya çevir
-            if len(veri.shape) > 1:
-                veri = veri.mean(axis=1)
-            
-            # Normalizasyon
-            veri_norm = veri.astype(np.float32) / np.max(np.abs(veri))
+            if len(veri.shape) > 1: veri = veri.mean(axis=1)
+            veri_norm = veri.astype(np.float32) / (np.max(np.abs(veri)) + 1e-12)
             
             denoiser.örnekleme_hızı = fs
-            temiz_veri = denoiser.filtrele(veri_norm)
+            temiz_veri = denoiser.filtrele(veri_norm, method=args.method)
             
-            # Çıktıyı kaydet
             wavfile.write(args.output, fs, (temiz_veri * 32767).astype(np.int16))
-            logger.info(f"İşlenmiş dosya kaydedildi: {args.output}")
+            logger.info(f"İşlenmiş dosya kaydedildi ({args.method}): {args.output}")
         except Exception as e:
             logger.error(f"Dosya işleme sırasında hata oluştu: {e}")
             sys.exit(1)

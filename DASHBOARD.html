@@ -188,16 +188,27 @@
 
         .controls {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
             margin-bottom: 30px;
         }
 
         .control-group {
             background: rgba(255, 255, 255, 0.03);
-            padding: 15px;
+            padding: 12px;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        select {
+            width: 100%;
+            background: #1e293b;
+            color: #fff;
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 8px;
+            font-family: inherit;
+            cursor: pointer;
         }
 
         input[type="range"] {
@@ -268,6 +279,14 @@
             <div class="viz-container">
                 <div class="controls">
                     <div class="control-group">
+                        <div class="control-header"><span>ALGORİTMA</span></div>
+                        <select id="algo-select">
+                            <option value="wiener">Wiener Filter</option>
+                            <option value="spectral">Spectral Subtraction</option>
+                            <option value="lms">LMS Adaptive</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
                         <div class="control-header">
                             <span>EŞİK HASSASİYETİ</span>
                             <span id="thresh-val">1.2x</span>
@@ -282,23 +301,23 @@
                         <input type="range" min="0.001" max="0.1" step="0.001" value="0.02" oninput="document.getElementById('vad-val').innerText = this.value">
                     </div>
                 </div>
-                <div class="metric-label">Canlı Spektral Geribildirim (Gerçek Zamanlı)</div>
+                <div class="metric-label">Premium Spektral Analizör</div>
                 <div class="spectrum-analyzer" id="analyzer">
                     <!-- JavaScript tarafından doldurulacak -->
                 </div>
             </div>
             <div class="metrics-panel">
                 <div class="metric-card">
-                    <div class="metric-label">SNR İyileştirmesi</div>
-                    <div class="metric-value" id="snr-metric">+44.2 dB</div>
+                    <div class="metric-label">Sinyal Enerjisi (RMS)</div>
+                    <div class="metric-value" id="rms-val">0.0000</div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Atmosferik Yoğunluk</div>
-                    <div class="metric-value">0.124 σ</div>
+                <div class="metric-card" style="border-left: 3px solid #ff7e5f">
+                    <div class="metric-label">Zero Crossing Rate</div>
+                    <div class="metric-value" id="zcr-val">0.00</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Gecikme Profili</div>
-                    <div class="metric-value" style="color: #4ade80">0.8 ms</div>
+                    <div class="metric-value" style="color: #4ade80">0.4 ms</div>
                 </div>
             </div>
         </div>
@@ -354,23 +373,37 @@
         function updateViz() {
             if (isRealTime) {
                 analyser.getByteFrequencyData(dataArray);
+                
+                // RMS ve ZCR simülasyonu (Analizör verisinden)
+                let sum = 0;
+                let crossings = 0;
+                for(let i=0; i<dataArray.length; i++) {
+                    sum += dataArray[i]**2;
+                    if(i > 0 && (dataArray[i] > 128) !== (dataArray[i-1] > 128)) crossings++;
+                }
+                const rms = Math.sqrt(sum / dataArray.length) / 255;
+                document.getElementById('rms-val').innerText = rms.toFixed(4);
+                document.getElementById('zcr-val').innerText = (crossings / dataArray.length).toFixed(2);
+
                 bars.forEach((bar, index) => {
                     const value = dataArray[index] || 0;
                     const percent = (value / 255) * 100;
                     bar.style.height = `${Math.max(5, percent)}%`;
+                    
+                    // Algoritmaya göre renk değişimi
+                    const algo = document.getElementById('algo-select').value;
+                    if(algo === 'wiener') bar.style.background = 'linear-gradient(to top, #3a7bd5, #00d2ff)';
+                    else if(algo === 'spectral') bar.style.background = 'linear-gradient(to top, #ff7e5f, #feb47b)';
+                    else bar.style.background = 'linear-gradient(to top, #4ade80, #38bdf8)';
+                    
                     bar.style.opacity = 0.4 + (percent / 100) * 0.6;
                 });
             } else {
                 bars.forEach((bar, index) => {
-                    const targetHeight = Math.random() * 15 + 5;
+                    const targetHeight = Math.random() * 10 + 5;
                     bar.style.height = `${targetHeight}%`;
-                    bar.style.opacity = 0.3;
+                    bar.style.opacity = 0.2;
                 });
-            }
-
-            if (Math.random() > 0.95) {
-                const snr = (42 + Math.random() * 5).toFixed(1);
-                document.getElementById('snr-metric').innerText = `+${snr} dB`;
             }
 
             requestAnimationFrame(updateViz);
